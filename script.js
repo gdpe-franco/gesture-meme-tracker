@@ -3,11 +3,7 @@
 
 // Gesture to meme mapping
 const GESTURE_MEMES = {
-    "jijija": "images/JIJIJA.mp4",
-    "mimimi": "images/MIMIMI.mp4",
-    "sixseven": "images/SIXSEVEN.mp4",
-    "cerrao": "images/CERRAO.mp4",
-    "none": "images/ok_sign.jpg"
+    chill: "images/cat-reactions/chill.png", confident: "images/cat-reactions/confident.jpg", desperate: "images/cat-reactions/desperate.jpeg", disgusted: "images/cat-reactions/disgusted.jpeg", happy: "images/cat-reactions/happy.gif", heart: "images/cat-reactions/heart.jpg", mad: "images/cat-reactions/mad.png", pointing_front: "images/cat-reactions/pointing-front.jpeg", pointing_up: "images/cat-reactions/pointing-up.jpg", punch: "images/cat-reactions/punch.png", sad: "images/cat-reactions/sad.jpeg", scared: "images/cat-reactions/scared.jpg", scuba: "images/cat-reactions/scuba.gif", thumbs_up: "images/cat-reactions/thumbs-up.jpg", tongue_out: "images/cat-reactions/tongue-out.png", none: "images/cat-reactions/confident.jpg"
 };
 
 // Global variables
@@ -111,7 +107,7 @@ function isFingerExtended(landmarks, tipIdx, pipIdx, mcpIdx) {
  */
 function detectGesture(handLandmarks, allHands, faceLandmarks) {
     if (!handLandmarks) {
-        // Check for face-only gestures (JIJIJA)
+        // Check face-only reactions.
         if (faceLandmarks) {
             return detectFaceGesture(faceLandmarks);
         }
@@ -145,15 +141,15 @@ function detectGesture(handLandmarks, allHands, faceLandmarks) {
 
     const numExtended = extendedFingers.length;
 
-    // JIJIJA - Laughing (mouth open detection)
+    // Legacy mouth rule
     if (faceLandmarks) {
-        const jijijaResult = detectFaceGesture(faceLandmarks);
-        if (jijijaResult === "jijija") {
-            return "jijija";
+        const faceResult = detectFaceGesture(faceLandmarks);
+        if (faceResult !== "none") {
+            return faceResult;
         }
     }
 
-    // MIMIMI - Both hands closed (fists)
+    // Legacy two-fist rule
     if (allHands && allHands.length === 2) {
         let hand1Extended = 0;
         let hand2Extended = 0;
@@ -175,16 +171,16 @@ function detectGesture(handLandmarks, allHands, faceLandmarks) {
 
         // Both hands closed (fists)
         if (hand1Extended === 0 && hand2Extended === 0) {
-            return "mimimi";
+            return "mad";
         }
     }
 
-    // CERRAO - One hand with only index finger extended
+    // Legacy index rule
     if (numExtended === 1 && extendedFingers.includes("index")) {
-        return "cerrao";
+        return "pointing_up";
     }
 
-    // SIXSEVEN - Both hands with open palms, spread apart (balance pose)
+    // Legacy two-hand rule
     if (allHands && allHands.length === 2) {
         let hand1Extended = 0;
         let hand2Extended = 0;
@@ -205,7 +201,7 @@ function detectGesture(handLandmarks, allHands, faceLandmarks) {
             const xDistance = Math.abs(hand1Wrist.x - hand2Wrist.x);
 
             if (xDistance > 0.3) {
-                return "sixseven";
+                return "scared";
             }
         }
     }
@@ -214,14 +210,14 @@ function detectGesture(handLandmarks, allHands, faceLandmarks) {
 }
 
 /**
- * Detect face-only gestures (JIJIJA - laughing)
+ * Detect face-only reactions
  */
 function detectFaceGesture(faceLandmarks) {
     if (!faceLandmarks || !faceLandmarks.length) {
         return "none";
     }
 
-    // Key face landmarks for mouth detection (matching Python version)
+    // Key face landmarks for mouth detection
     // 13: upper lip, 14: lower lip, 61: left mouth corner, 291: right mouth corner
     const upperLip = faceLandmarks[13];
     const lowerLip = faceLandmarks[14];
@@ -242,9 +238,9 @@ function detectFaceGesture(faceLandmarks) {
         mouthWidthElement.textContent = mouthWidth.toFixed(3);
     }
 
-    // Check if mouth is open (laughing) - same thresholds as Python version
+    // Legacy mouth-opening rule
     if (mouthHeight > 0.01 && mouthWidth > 0.005) {
-        return "jijija";
+        return "tongue_out";
     }
 
     return "none";
@@ -253,6 +249,34 @@ function detectFaceGesture(faceLandmarks) {
 /**
  * Handle results from MediaPipe
  */
+function detectFaceGesture(face) {
+    if (!face) return "none";
+    const [upper, lower, left, right] = [face[13], face[14], face[61], face[291]];
+    const height = Math.abs(upper.y - lower.y), width = Math.abs(left.x - right.x), center = (upper.y + lower.y) / 2;
+    if (Math.abs(left.y - right.y) > .012) return "confident";
+    if (left.y > center + .012 && right.y > center + .012) return "sad";
+    if (height > .025) return "tongue_out";
+    return width > .12 ? "happy" : "none";
+}
+
+function detectGesture(hand, allHands, face) {
+    if (!hand) return detectFaceGesture(face);
+    const fingers = [[8, 6, 5], [12, 10, 9], [16, 14, 13], [20, 18, 17]].map(p => isFingerExtended(hand, ...p));
+    const open = fingers.filter(Boolean).length, thumb = Math.abs(hand[4].x - hand[5].x) > .08;
+    if (allHands?.length === 2) {
+        const counts = allHands.map(h => [[8, 6], [12, 10], [16, 14], [20, 18]].filter(([a, b]) => h[a].y < h[b].y).length), wrists = allHands.map(h => h[0]);
+        if (Math.abs(allHands[0][8].x - allHands[1][8].x) < .08 && Math.abs(allHands[0][4].x - allHands[1][4].x) < .10) return "heart";
+        if (counts.every(n => n >= 3)) return wrists.every(w => w.y < .45) ? "desperate" : "scared";
+        if (counts.every(n => n === 0)) return "mad";
+    }
+    if (!open) return "punch";
+    if (thumb && fingers[3] && open === 1) return "chill";
+    if (thumb && !open) return "thumbs_up";
+    if (fingers[0] && open === 1) return hand[8].z < hand[6].z - .08 ? "pointing_front" : "pointing_up";
+    if (fingers[0] && fingers[1] && open === 2) return "disgusted";
+    return detectFaceGesture(face);
+}
+
 async function onResults(results) {
     // Update FPS
     fpsCounter++;
@@ -427,4 +451,3 @@ function detectGestureWithFace(handLandmarks, allHands) {
 
 // Start when page loads
 window.addEventListener('load', init);
-
