@@ -45,3 +45,6 @@ docker run --rm -p 8000:80 cat-gesture-meme-tracker
 
 Then open `http://localhost:8000` and allow camera access. Docker only serves
 the static files; MediaPipe and webcam access run in the browser.
+
+Stop a running container from another terminal with `make down`.
+If port 8000 is busy, use `make up PORT=8001` and open http://localhost:8001.

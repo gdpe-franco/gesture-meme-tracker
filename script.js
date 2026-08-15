@@ -3,7 +3,7 @@
 
 // Gesture to meme mapping
 const GESTURE_MEMES = {
-    chill: "images/cat-reactions/chill.png", confident: "images/cat-reactions/confident.jpg", desperate: "images/cat-reactions/desperate.jpeg", disgusted: "images/cat-reactions/disgusted.jpeg", happy: "images/cat-reactions/happy.gif", heart: "images/cat-reactions/heart.jpg", mad: "images/cat-reactions/mad.png", pointing_front: "images/cat-reactions/pointing-front.jpeg", pointing_up: "images/cat-reactions/pointing-up.jpg", punch: "images/cat-reactions/punch.png", sad: "images/cat-reactions/sad.jpeg", scared: "images/cat-reactions/scared.jpg", scuba: "images/cat-reactions/scuba.gif", thumbs_up: "images/cat-reactions/thumbs-up.jpg", tongue_out: "images/cat-reactions/tongue-out.png", none: "images/cat-reactions/confident.jpg"
+    chill: "images/cat-reactions/chill.png", confident: "images/cat-reactions/confident.jpg", desperate: "images/cat-reactions/desperate.jpeg", happy: "images/cat-reactions/happy.gif", heart: "images/cat-reactions/heart.jpg", mad: "images/cat-reactions/mad.png", pointing_front: "images/cat-reactions/pointing-front.jpeg", pointing_up: "images/cat-reactions/pointing-up.jpg", punch: "images/cat-reactions/punch.png", sad: "images/cat-reactions/sad.jpeg", scared: "images/cat-reactions/scared.jpg", scuba: "images/cat-reactions/scuba.gif", thumbs_up: "images/cat-reactions/thumbs-up.jpg", tongue_out: "images/cat-reactions/tongue-out.png", none: "images/cat-reactions/confident.jpg"
 };
 
 // Global variables
@@ -14,6 +14,8 @@ let currentGesture = "none";
 let lastGesture = "none";
 let fpsInterval, startTime, now, then, elapsed;
 let fpsCounter = 0;
+let scubaHandY = null;
+let scubaUntil = 0;
 
 // DOM Elements
 const webcamElement = document.getElementById('webcam');
@@ -24,6 +26,15 @@ const memeVideoElement = document.getElementById('memeVideo');
 const memeImageElement = document.getElementById('memeImage');
 const loadingElement = document.getElementById('loading');
 const startButton = document.getElementById('startButton');
+
+function palmFacesCamera(hand) {
+    const a = hand[5], b = hand[17], wrist = hand[0];
+    const ux = a.x - wrist.x, uy = a.y - wrist.y, uz = a.z - wrist.z;
+    const vx = b.x - wrist.x, vy = b.y - wrist.y, vz = b.z - wrist.z;
+    const nz = ux * vy - uy * vx;
+    const size = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, nz);
+    return size && Math.abs(nz / size) > .7;
+}
 
 // Debug elements
 const debugInfo = document.getElementById('debugInfo');
@@ -253,10 +264,12 @@ function detectFaceGesture(face) {
     if (!face) return "none";
     const [upper, lower, left, right] = [face[13], face[14], face[61], face[291]];
     const height = Math.abs(upper.y - lower.y), width = Math.abs(left.x - right.x), center = (upper.y + lower.y) / 2;
-    if (Math.abs(left.y - right.y) > .012) return "confident";
-    if (left.y > center + .012 && right.y > center + .012) return "sad";
-    if (height > .025) return "tongue_out";
-    return width > .12 ? "happy" : "none";
+    if (height > .01) return "tongue_out";
+    const leftLift = center - left.y, rightLift = center - right.y;
+    if (Math.abs(leftLift - rightLift) > .004) return "confident";
+    if ((left.y + right.y) / 2 > upper.y + .004 && Math.abs(left.y - right.y) < .02) return "sad";
+    if (left.y < center - .004 && right.y < center - .004) return "happy";
+    return width > .10 ? "happy" : "none";
 }
 
 function detectGesture(hand, allHands, face) {
@@ -265,15 +278,32 @@ function detectGesture(hand, allHands, face) {
     const open = fingers.filter(Boolean).length, thumb = Math.abs(hand[4].x - hand[5].x) > .08;
     if (allHands?.length === 2) {
         const counts = allHands.map(h => [[8, 6], [12, 10], [16, 14], [20, 18]].filter(([a, b]) => h[a].y < h[b].y).length), wrists = allHands.map(h => h[0]);
+        if (face) {
+            const mouth = face[13], covered = allHands.map(h => Math.abs(h[9].x - mouth.x) < .14 && Math.abs(h[9].y - mouth.y) < .14);
+            const raisedY = wrists.find((wrist, index) => !covered[index] && wrist.y < .45)?.y;
+            const moving = raisedY !== undefined && scubaHandY !== null && Math.abs(raisedY - scubaHandY) > .012;
+            scubaHandY = raisedY ?? scubaHandY;
+            if (covered.includes(true) && moving) scubaUntil = performance.now() + 750;
+            if (covered.includes(true) && raisedY !== undefined) return performance.now() < scubaUntil ? "scuba" : "none";
+        }
         if (Math.abs(allHands[0][8].x - allHands[1][8].x) < .08 && Math.abs(allHands[0][4].x - allHands[1][4].x) < .10) return "heart";
-        if (counts.every(n => n >= 3)) return wrists.every(w => w.y < .45) ? "desperate" : "scared";
+        if (counts.every(n => n >= 3)) {
+            const faceCenter = face ? (face[234].x + face[454].x) / 2 : .5;
+            return wrists.every(w => Math.abs(w.x - faceCenter) < .28 && w.y < .7) ? "desperate" : "scared";
+        }
         if (counts.every(n => n === 0)) return "mad";
     }
-    if (!open) return "punch";
     if (thumb && fingers[3] && open === 1) return "chill";
     if (thumb && !open) return "thumbs_up";
-    if (fingers[0] && open === 1) return hand[8].z < hand[6].z - .08 ? "pointing_front" : "pointing_up";
-    if (fingers[0] && fingers[1] && open === 2) return "disgusted";
+    if (!open) return "punch";
+    const otherFingersHidden = !fingers[1] && !fingers[2] && !fingers[3];
+    if (otherFingersHidden && hand[8].z < hand[6].z - .02 && Math.abs(hand[8].x - hand[6].x) >= Math.abs(hand[8].y - hand[6].y) * .7) {
+        return "pointing_front";
+    }
+    if (fingers[0] && open === 1) {
+        return palmFacesCamera(hand) ? "pointing_up" : "none";
+    }
+    if (fingers[0] && fingers[1] && open === 2) return "none";
     return detectFaceGesture(face);
 }
 
@@ -355,6 +385,12 @@ function updateGestureDisplay(gesture) {
     const gestureText = gesture.charAt(0).toUpperCase() + gesture.slice(1);
     gestureLabelElement.textContent = `Gesture: ${gestureText}`;
 
+    if (gesture === "none") {
+        memeVideoElement.style.display = 'none';
+        memeImageElement.style.display = 'none';
+        return;
+    }
+
     // Update meme
     const memeFile = GESTURE_MEMES[gesture];
     
@@ -375,6 +411,8 @@ function updateGestureDisplay(gesture) {
         memeImageElement.src = memeFile;
     }
 }
+
+updateGestureDisplay("none");
 
 /**
  * Initialize camera
