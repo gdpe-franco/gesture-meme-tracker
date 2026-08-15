@@ -1,12 +1,12 @@
 #!/bin/bash
-# Launcher script for Gesture Meme Tracker
-# This ensures we use the correct Python interpreter
+# Launcher script for Cat Gesture Meme Tracker
 
-PYTHON_PATH="/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PYTHON_PATH="${PYTHON_PATH:-python3}"
 
 echo "Starting Gesture Meme Tracker..."
 echo "Using Python: $PYTHON_PATH"
 echo ""
 
-$PYTHON_PATH gesture_meme_tracker.py
-
+cd "$SCRIPT_DIR"
+exec "$PYTHON_PATH" gesture_meme_tracker.py

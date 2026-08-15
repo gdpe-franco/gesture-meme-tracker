@@ -13,17 +13,28 @@ mp_hands = mp.solutions.hands
 mp_face_mesh = mp.solutions.face_mesh
 mp_drawing = mp.solutions.drawing_utils
 
-# Dictionary mapping gestures to meme image/video filenames
+# Dictionary mapping gestures to cat-meme image/video filenames
 GESTURE_MEMES = {
-    "jijija": "JIJIJA.mp4",      # Laughing emotionally
-    "mimimi": "MIMIMI.mp4",      # Hands close to face cheeks
-    "sixseven": "SIXSEVEN.mp4",  # Hands moving up/down like balance
-    "cerrao": "CERRAO.mp4",      # One finger on jaw
-    "none": "ok_sign.jpg"  # Default/neutral gesture
+    "chill": "cat-reactions/chill.png",
+    "confident": "cat-reactions/confident.jpg",
+    "desperate": "cat-reactions/desperate.jpeg",
+    "disgusted": "cat-reactions/disgusted.jpeg",
+    "happy": "cat-reactions/happy.gif",
+    "heart": "cat-reactions/heart.jpg",
+    "mad": "cat-reactions/mad.png",
+    "pointing_front": "cat-reactions/pointing-front.jpeg",
+    "pointing_up": "cat-reactions/pointing-up.jpg",
+    "punch": "cat-reactions/punch.png",
+    "sad": "cat-reactions/sad.jpeg",
+    "scared": "cat-reactions/scared.jpg",
+    "scuba": "cat-reactions/scuba.gif",
+    "thumbs_up": "cat-reactions/thumbs-up.jpg",
+    "tongue_out": "cat-reactions/tongue-out.png",
+    "none": "cat-reactions/confident.jpg",
 }
 
 
-def detect_gesture(hand_landmarks, all_hands=None, face_landmarks=None):
+def detect_gesture_legacy(hand_landmarks, all_hands=None, face_landmarks=None):
     """
     Detects hand gesture based on landmark positions.
     
@@ -149,6 +160,78 @@ def detect_gesture(hand_landmarks, all_hands=None, face_landmarks=None):
     return "none"
 
 
+def detect_gesture(hand_landmarks, all_hands=None, face_landmarks=None):
+    """Match visible hand poses to the supplied cat reactions."""
+    landmarks = hand_landmarks.landmark
+
+    def extended(tip, pip, mcp):
+        return landmarks[tip].y < landmarks[pip].y < landmarks[mcp].y
+
+    fingers = {
+        "index": extended(8, 6, 5),
+        "middle": extended(12, 10, 9),
+        "ring": extended(16, 14, 13),
+        "pinky": extended(20, 18, 17),
+    }
+    open_fingers = sum(fingers.values())
+    thumb_extended = abs(landmarks[4].x - landmarks[5].x) > 0.08
+
+    if all_hands and len(all_hands) == 2:
+        open_counts = [sum(hand.landmark[tip].y < hand.landmark[pip].y
+                           for tip, pip in [(8, 6), (12, 10), (16, 14), (20, 18)])
+                       for hand in all_hands]
+        wrists = [hand.landmark[0] for hand in all_hands]
+        if face_landmarks:
+            mouth = face_landmarks.landmark[13]
+            covered = [abs(hand.landmark[9].x - mouth.x) < 0.14 and
+                       abs(hand.landmark[9].y - mouth.y) < 0.14
+                       for hand in all_hands]
+            raised = [wrist.y < 0.45 for wrist in wrists]
+            raised_y = next((wrists[index].y for index in range(2)
+                             if not covered[index] and raised[index]), None)
+            previous_y = getattr(detect_gesture, "scuba_hand_y", raised_y)
+            detect_gesture.scuba_hand_y = raised_y
+            if any(covered) and raised_y is not None and abs(raised_y - previous_y) > 0.012:
+                return "scuba"
+        index_tips_close = abs(all_hands[0].landmark[8].x - all_hands[1].landmark[8].x) < 0.08
+        thumb_tips_close = abs(all_hands[0].landmark[4].x - all_hands[1].landmark[4].x) < 0.10
+        if index_tips_close and thumb_tips_close:
+            return "heart"
+        if all(count >= 3 for count in open_counts):
+            if all(wrist.y < 0.45 for wrist in wrists):
+                return "desperate"
+            return "scared"
+        if all(count == 0 for count in open_counts):
+            return "mad"
+
+    if open_fingers == 0:
+        return "punch"
+    if thumb_extended and fingers["pinky"] and open_fingers == 1:
+        return "chill"
+    if thumb_extended and open_fingers == 0:
+        return "thumbs_up"
+    if fingers["index"] and open_fingers == 1:
+        if getattr(landmarks[8], "z", 0) < getattr(landmarks[6], "z", 0) - 0.08:
+            return "pointing_front"
+        return "pointing_up"
+    if fingers["index"] and fingers["middle"] and open_fingers == 2:
+        return "disgusted"
+    if face_landmarks:
+        face = face_landmarks.landmark
+        mouth_height = abs(face[13].y - face[14].y)
+        mouth_width = abs(face[61].x - face[291].x)
+        mouth_center = (face[13].y + face[14].y) / 2
+        if abs(face[61].y - face[291].y) > 0.012:
+            return "confident"
+        if face[61].y > mouth_center + 0.012 and face[291].y > mouth_center + 0.012:
+            return "sad"
+        if mouth_height > 0.025:
+            return "tongue_out"
+        if mouth_width > 0.12:
+            return "happy"
+    return "none"
+
+
 def load_meme_media(images_folder):
     """
     Load all meme images and videos from the specified folder.
@@ -170,7 +253,7 @@ def load_meme_media(images_folder):
         media_path = os.path.join(images_folder, filename)
         
         # Check if it's a video file
-        if filename.endswith(('.mp4', '.avi', '.mov', '.webm')):
+        if filename.endswith(('.mp4', '.avi', '.mov', '.webm', '.gif')):
             is_video[gesture] = True
             if os.path.exists(media_path):
                 cap = cv2.VideoCapture(media_path)
@@ -261,15 +344,11 @@ def main():
     Main function to run the Gesture Meme Tracker application.
     """
     print("=" * 60)
-    print("Gesture Meme Tracker - Clash Royale Edition")
+    print("Cat Gesture Meme Tracker")
     print("Press 'q' to quit")
     print("=" * 60)
-    print("\nCustom Gestures:")
-    print("😂 JIJIJA - Just laugh (mouth open)")
-    print("🤐 MIMIMI - Both hands closed (fists)")
-    print("⚖️  SIXSEVEN - Balance pose (hands extended wide)")
-    print("🤫 CERRAO - One finger up (index finger)")
-    print("👌 Default - Neutral state (no gesture)")
+    print("\nGestures: shaka, thumbs up, point up/front, fist, heart, and two-hand poses")
+    print("Face reactions: happy, tongue out, and scuba/surprised")
     print("\nMake sure your hand(s) are visible to the camera!")
     print("=" * 60)
     
@@ -439,7 +518,7 @@ def main():
                        0.6, (255, 255, 255), 1, cv2.LINE_AA)
             
             # Display the combined frame
-            cv2.imshow('Gesture Meme Tracker', combined_frame)
+            cv2.imshow('Cat Gesture Meme Tracker', combined_frame)
             
             # Check for 'q' key press to quit
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -460,4 +539,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

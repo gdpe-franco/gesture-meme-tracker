@@ -1,14 +1,10 @@
-# 🎭 Gesture Meme Tracker
+# 🐈 Cat Gesture Meme Tracker
 
-Real-time hand gesture detection with meme display using MediaPipe!
+Real-time hand gesture detection with cat-meme reactions using MediaPipe.
 
-## 🌐 Two Versions Available
+## 🖥️ Python Desktop Version
 
-### 🖥️ **Desktop Version** (Python + OpenCV)
-Run locally on your computer with a native window
-
-### 🌍 **Web Version** (JavaScript) ⭐ NEW!
-Works in any browser, deploy to the internet, accessible anywhere!
+The Python + OpenCV application is the primary version of this project.
 
 ## 🚀 Features
 
@@ -25,7 +21,7 @@ Works in any browser, deploy to the internet, accessible anywhere!
 
 ---
 
-# 🌍 Web Version (Recommended)
+# 🌍 Web Version (Optional)
 
 ## 🎯 Live Demo
 Once deployed, your app will be accessible from any device with a browser!
@@ -75,6 +71,23 @@ python -m SimpleHTTPServer 8000
 
 Then open `http://localhost:8000` in your browser.
 
+### Run in Docker
+
+Docker is a good fit for the web version: it isolates the static web server
+while your browser still accesses the webcam on `localhost`.
+
+```bash
+docker build -t gesture-meme-tracker .
+docker run --rm -p 8000:80 gesture-meme-tracker
+```
+
+Open `http://localhost:8000` and allow camera access. Stop the container with
+`Ctrl+C`.
+
+The desktop Python/OpenCV version is best run natively: putting it in Docker
+also requires forwarding both the webcam and a GUI window, which is more
+complex and less portable than the local setup.
+
 ## 📋 Web Version Requirements
 
 - Modern web browser (Chrome, Firefox, Safari, Edge)
@@ -83,7 +96,7 @@ Then open `http://localhost:8000` in your browser.
 
 ---
 
-# 🖥️ Desktop Version (Python)
+# 🖥️ Run the Python App
 
 ## 📋 Requirements
 
@@ -93,22 +106,18 @@ Then open `http://localhost:8000` in your browser.
 
 ## 🔧 Installation
 
-1. **Install dependencies:**
+1. **Create and activate a virtual environment:**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Add meme images:**
-      - (these will change) 
-   - Create an `images` folder in the same directory as the script (it will be created automatically if it doesn't exist)
-   - Add the following image files:
-     - `JIJIJA.mp4` - Laughing royale
-     - `CERRAO.mp4` - Crazy jawline
-     - `MIMIMI.mp4` - Goblin crying
-     - `SIXSEVEN.mp4` - 6 7 
-     - `default.jpg` - shown when no gesture detected
-
-   **Note:** You can use `.jpg`, `.png`, or `.jpeg` formats (update filenames in code accordingly)
+3. **Add cat reaction files:** See [`images/README.txt`](images/README.txt) for the expected filenames. Missing files show a labeled placeholder.
 
 ## 🎮 Usage (Desktop Version)
 
@@ -239,4 +248,3 @@ Free to use and modify for educational purposes!
 
 🌐 **Web Version:** Runs entirely in your browser  
 🖥️ **Desktop Version:** Native Python application
-
